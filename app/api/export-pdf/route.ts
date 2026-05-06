@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import puppeteer from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
 import { auth } from "@/auth";
+import fs from "fs";
 
 export const runtime = 'nodejs';
 
@@ -50,35 +51,55 @@ export async function POST(req: NextRequest) {
       console.log("PDF Export - HTML length:", html.length);
     }
 
-    // Launch puppeteer-core with @sparticuz/chromium
-    let executablePath: string | undefined;
+    // Launch puppeteer-core
+    let executablePath: string | null = null;
+    const isDevelopment = process.env.NODE_ENV === "development";
 
-    try {
-      executablePath = await chromium.executablePath();
-    } catch (e) {
-      // Chromium not available, use system browser
-    }
-
-    // Local development fallback for Windows/MacOS
-    if (!executablePath && process.env.NODE_ENV === "development") {
+    // 1. Try to find local system browser first if in development
+    if (isDevelopment) {
       const { platform } = process;
       if (platform === "win32") {
-        executablePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+        const chromePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
         const edgePath = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
-        const fs = require('fs');
-        if (!fs.existsSync(executablePath) && fs.existsSync(edgePath)) {
+        if (fs.existsSync(chromePath)) {
+          executablePath = chromePath;
+        } else if (fs.existsSync(edgePath)) {
           executablePath = edgePath;
         }
       } else if (platform === "darwin") {
-        executablePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+        const chromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+        if (fs.existsSync(chromePath)) {
+          executablePath = chromePath;
+        }
       }
     }
 
+    // 2. If not found or not in development, try @sparticuz/chromium
+    if (!executablePath) {
+      try {
+        const sparticuzPath = await chromium.executablePath();
+        // Only use it if the file actually exists
+        if (sparticuzPath && fs.existsSync(sparticuzPath)) {
+          executablePath = sparticuzPath;
+        }
+      } catch (e) {
+        if (isDebug) console.error("Error getting @sparticuz/chromium path:", e);
+      }
+    }
+
+    if (!executablePath) {
+      throw new Error("Could not find a valid browser executable (Chrome, Edge, or Chromium)");
+    }
+
+    if (isDebug) {
+      console.log("Using browser executable at:", executablePath);
+    }
+
     const launchConfig: any = {
-      args: (chromium as any).args || ["--no-sandbox"],
+      args: (chromium as any).args || ["--no-sandbox", "--disable-setuid-sandbox"],
       executablePath,
-      defaultViewport: (chromium as any).defaultViewport,
-      headless: (chromium as any).headless,
+      defaultViewport: (chromium as any).defaultViewport || { width: 794, height: 1123 },
+      headless: (chromium as any).headless !== undefined ? (chromium as any).headless : true,
     };
 
     browser = await puppeteer.launch(launchConfig);
@@ -95,20 +116,15 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // Set viewport to A4 dimensions
-    await page.setViewport({
-      width: 794,
-      height: 1123,
-      deviceScaleFactor: 1,
-    });
+    // Don't set viewport - let puppeteer handle it for PDF generation
+    // Setting viewport can interfere with PDF rendering
 
     if (isDebug) {
       page.on('console', msg => console.log('PAGE LOG:', msg.text()));
       page.on('error', err => console.error('PAGE ERROR:', err));
     }
 
-    // Wrap the HTML element in a complete document
-    // NOTE: Removed Tailwind CDN. Relying on pre-inlined or global styles.
+    // Wrap the HTML element in a complete document with comprehensive print styles
     const wrappedHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -118,30 +134,56 @@ export async function POST(req: NextRequest) {
 * {
   -webkit-print-color-adjust: exact !important;
   color-adjust: exact !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
+
 html, body {
-  margin: 0;
-  padding: 0;
   width: 100%;
   height: 100%;
-  background: white;
+  background: white !important;
+  margin: 0;
+  padding: 0;
 }
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   margin: 0;
   padding: 0;
+  background: white;
+  display: block;
 }
+
 @page {
   size: A4;
   margin: 0;
+  padding: 0;
 }
+
 #cv-printable-area {
-  width: 100%;
-  max-width: 100%;
+  width: 210mm;
+  height: 297mm;
+  margin: 0;
+  padding: 0;
+  background: white;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Hide UI elements */
+nav, header:not(#cv-printable-area header), footer, button, [class*="no-print"] {
+  display: none !important;
+}
+
+/* Ensure text is visible */
+body, body * {
+  background: transparent !important;
+  color: #000 !important;
 }
 </style>
 </head>
-<body style="margin:0;padding:0;background:white;">
+<body>
 ${html}
 </body>
 </html>`;
@@ -151,25 +193,69 @@ ${html}
     });
 
     // Deterministic readiness check: wait for fonts and layout
-    await page.evaluateHandle(() => (document as any).fonts.ready);
+    try {
+      await page.evaluateHandle(() => (document as any).fonts.ready);
+    } catch (e) {
+      if (isDebug) console.log("Font loading not available");
+    }
+
+    // Wait for content to render
     await page.waitForFunction(() => {
       const elem = document.getElementById('cv-printable-area');
-      return elem && elem.offsetHeight > 0;
-    }, { timeout: 5000 });
+      if (!elem) {
+        console.log("Element cv-printable-area not found");
+        return false;
+      }
+      if (elem.offsetHeight === 0) {
+        console.log("Element height is 0");
+        return false;
+      }
+      return true;
+    }, { timeout: 10000 });
+
+    // Additional delay to ensure all styles are applied
+    await page.waitForTimeout(1000);
 
     if (isDebug) {
       const metrics = await page.metrics();
       console.log("Page metrics:", JSON.stringify(metrics));
     }
 
+    // Get actual content dimensions before generating PDF
+    const contentBox = await page.evaluate(() => {
+      const elem = document.getElementById('cv-printable-area');
+      if (!elem) return null;
+      return {
+        width: elem.offsetWidth,
+        height: elem.offsetHeight,
+        clientHeight: elem.clientHeight,
+        scrollHeight: elem.scrollHeight
+      };
+    });
+
+    if (isDebug) {
+      console.log("Content box dimensions:", JSON.stringify(contentBox));
+    }
+
     const pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      displayHeaderFooter: false,
+      margin: {
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0
+      },
+      preferCSSPageSize: true,
     });
 
+    if (isDebug) {
+      console.log("PDF Buffer length:", pdfBuffer.length);
+    }
+
     if (pdfBuffer.length === 0) {
-      throw new Error("Generated PDF is empty");
+      throw new Error("Generated PDF is empty - content may not have rendered");
     }
 
     // Sanitize filename
