@@ -13,10 +13,9 @@ interface CVPreviewProps {
   education?: Education;
   leadership?: Leadership[];
   certificates?: Certificate[];
-  user: any;
 }
 
-export function CVPreview({ cvInfo, projects, education, leadership, certificates, user }: CVPreviewProps) {
+export function CVPreview({ cvInfo, projects, education, leadership, certificates }: CVPreviewProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [exportComplete, setExportComplete] = useState(false);
 
@@ -60,22 +59,42 @@ export function CVPreview({ cvInfo, projects, education, leadership, certificate
         throw new Error(errorMessage);
       }
 
-      // Convert the response to a blob and trigger download
-      const blob = await response.blob();
+      // Parse JSON response which contains Base64 encoded PDF
+      const data = await response.json();
+      
+      if (!data.base64) {
+        throw new Error("Server response did not contain PDF data.");
+      }
+
+      // Convert Base64 to Blob
+      const byteCharacters = atob(data.base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: "application/pdf" });
+
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
+      a.style.display = "none";
       a.href = url;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      
+      // Delay revocation to ensure the browser has started the download
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 100);
 
       setExportComplete(true);
       toast.success("CV exported successfully");
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to export PDF";
       console.error("Export error:", error);
-      toast.error(error.message || "Failed to export PDF");
+      toast.error(message);
     } finally {
       setIsExporting(false);
     }
@@ -144,7 +163,7 @@ export function CVPreview({ cvInfo, projects, education, leadership, certificate
           <div>
             <p className="text-sm font-medium text-primary">Ready for Export</p>
             <p className="text-xs text-primary/80">
-              Optimized for A4 — click Export PDF when you're ready to download.
+              Optimized for A4 — click Export PDF when you&apos;re ready to download.
             </p>
           </div>
         </div>

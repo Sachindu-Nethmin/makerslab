@@ -12,7 +12,7 @@ import { CVPreview } from "./cv-preview";
 import { CVInfo, Education, Leadership, Certificate, CVProject } from "./types";
 
 interface BuilderFormProps {
-  user: any;
+  user: CVUser;
   projects: CVProject[];
 }
 
@@ -20,98 +20,54 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
   // Initialize state from localStorage or defaults
   const STORAGE_KEY = `userCV:${user._id}`;
 
-  const [cvInfo, setCvInfo] = useState<CVInfo>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed.cvInfo) return parsed.cvInfo;
-        }
-      } catch (e) {
-        console.error("Failed to load CV info from localStorage", e);
-      }
-    }
-    return {
-      name: user.name || "",
-      title: "",
-      email: user.email || "",
-      phone: "",
-      address: "",
-      linkedin: user.linkedin || "",
-      github: user.github || "",
-      summary: user.bio || "",
-      skills: Array.from(new Set(projects.flatMap(p => p.tags))).join(", "),
-    };
+  const [hasMounted, setHasMounted] = useState(false);
+
+  const [cvInfo, setCvInfo] = useState<CVInfo>({
+    name: user.name || "",
+    title: "",
+    email: user.email || "",
+    phone: "",
+    address: "",
+    linkedin: user.linkedin || "",
+    github: user.github || "",
+    summary: user.bio || "",
+    skills: Array.from(new Set(projects.flatMap(p => p.tags))).join(", "),
   });
 
-  const [education, setEducation] = useState<Education>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed.education) return parsed.education;
-        }
-      } catch (e) {
-        console.error("Failed to load education from localStorage", e);
-      }
-    }
-    return {
-      degree: "",
-      institution: "",
-      year: "",
-      coursework: "",
-      highSchool: "",
-      highSchoolYear: "",
-      highSchoolStream: "",
-    };
+  const [education, setEducation] = useState<Education>({
+    degree: "",
+    institution: "",
+    year: "",
+    coursework: "",
+    highSchool: "",
+    highSchoolYear: "",
+    highSchoolStream: "",
   });
 
-  const [leadership, setLeadership] = useState<Leadership[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed.leadership) return parsed.leadership;
-        }
-      } catch (e) {
-        console.error("Failed to load leadership from localStorage", e);
-      }
-    }
-    return [];
-  });
+  const [leadership, setLeadership] = useState<Leadership[]>([]);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(
+    projects.slice(0, 3).map(p => p._id)
+  );
 
-  const [certificates, setCertificates] = useState<Certificate[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed.certificates) return parsed.certificates;
-        }
-      } catch (e) {
-        console.error("Failed to load certificates from localStorage", e);
+  // Load from localStorage on mount
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHasMounted(true);
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.cvInfo) setCvInfo(parsed.cvInfo);
+        if (parsed.education) setEducation(parsed.education);
+        if (parsed.leadership) setLeadership(parsed.leadership);
+        if (parsed.certificates) setCertificates(parsed.certificates);
+        if (parsed.selectedProjectIds) setSelectedProjectIds(parsed.selectedProjectIds);
       }
+    } catch (e) {
+      console.error("Failed to load CV data from localStorage", e);
     }
-    return [];
-  });
-
-  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed.selectedProjectIds) return parsed.selectedProjectIds;
-        }
-      } catch (e) {
-        console.error("Failed to load selected projects from localStorage", e);
-      }
-    }
-    return projects.slice(0, 3).map(p => p._id);
-  });
+  }, [STORAGE_KEY]);
 
   const [newLeadership, setNewLeadership] = useState<Leadership>({
     title: "",
@@ -127,6 +83,7 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
 
   // Persist to localStorage on change
   useEffect(() => {
+    if (!hasMounted) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         cvInfo,
@@ -138,7 +95,7 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
     } catch (e) {
       console.error("Failed to save CV data to localStorage", e);
     }
-  }, [cvInfo, education, leadership, certificates, selectedProjectIds, STORAGE_KEY]);
+  }, [cvInfo, education, leadership, certificates, selectedProjectIds, STORAGE_KEY, hasMounted]);
 
   const handleCvInfoChange = (field: keyof CVInfo, value: string) => {
     setCvInfo(prev => ({ ...prev, [field]: value }));
@@ -498,14 +455,19 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
       </div>
 
       <div className="lg:sticky lg:top-24 self-start">
-        <CVPreview
-          cvInfo={cvInfo}
-          projects={selectedProjects}
-          education={education}
-          leadership={leadership}
-          certificates={certificates}
-          user={user}
-        />
+        {hasMounted ? (
+          <CVPreview
+            cvInfo={cvInfo}
+            projects={selectedProjects}
+            education={education}
+            leadership={leadership}
+            certificates={certificates}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-64 border-2 border-dashed rounded-xl">
+            <p className="text-muted-foreground">Loading preview...</p>
+          </div>
+        )}
       </div>
     </div>
   );

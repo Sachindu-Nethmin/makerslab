@@ -37,7 +37,7 @@ export function CVTemplate({ cvInfo, projects, education, leadership = [], certi
   ].filter(Boolean);
 
   return (
-    <div id="cv-printable-area" style={{ width: '100%', background: 'white', color: '#1a1a1a', fontFamily: SERIF_FONT, lineHeight: 1.625 }}>
+    <div id="cv-printable-area" style={{ background: 'white', color: '#1a1a1a', fontFamily: SERIF_FONT, lineHeight: 1.625 }}>
       {/* Header */}
       <header style={{ borderBottom: '2px solid black', paddingBottom: '1.5rem', marginBottom: '2rem' }}>
         <h1 style={{ fontSize: '2.25rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '-0.05em', marginBottom: '0.5rem' }}>{cvInfo.name}</h1>

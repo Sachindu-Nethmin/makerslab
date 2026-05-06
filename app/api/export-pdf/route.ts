@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
 
     // Launch puppeteer-core
     let executablePath: string | null = null;
-    const isDevelopment = process.env.NODE_ENV === "development";
+    const isDevelopment = process.env.NODE_ENV !== "production";
 
     // 1. Try to find local system browser first if in development
     if (isDevelopment) {
@@ -95,8 +95,14 @@ export async function POST(req: NextRequest) {
       console.log("Using browser executable at:", executablePath);
     }
 
-    const launchConfig: any = {
-      args: (chromium as any).args || ["--no-sandbox", "--disable-setuid-sandbox"],
+    const launchConfig = {
+      args: (chromium as any).args || [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-accelerated-2d-canvas",
+        "--disable-gpu",
+      ],
       executablePath,
       defaultViewport: (chromium as any).defaultViewport || { width: 794, height: 1123 },
       headless: (chromium as any).headless !== undefined ? (chromium as any).headless : true,
@@ -153,6 +159,11 @@ body {
   margin: 0;
 }
 
+body, html {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
 #cv-printable-area {
   width: 210mm;
   padding: 20mm;
@@ -161,9 +172,11 @@ body {
   display: block !important;
   visibility: visible !important;
   opacity: 1 !important;
+  margin: 0 !important;
+  min-height: 297mm;
 }
 
-nav, header:not(#cv-printable-area header), footer, button, [class*="no-print"] {
+nav, footer, button, [class*="no-print"] {
   display: none !important;
 }
 </style>
@@ -180,7 +193,7 @@ ${html}
     // Deterministic readiness check: wait for fonts and layout
     try {
       await page.evaluateHandle(() => (document as any).fonts.ready);
-    } catch (e) {
+    } catch {
       if (isDebug) console.log("Font loading not available");
     }
 
@@ -198,8 +211,6 @@ ${html}
       return true;
     }, { timeout: 10000 });
 
-    // Additional delay to ensure all styles are applied
-    await new Promise(resolve => setTimeout(resolve, 1000));
 
     if (isDebug) {
       const metrics = await page.metrics();
@@ -207,7 +218,7 @@ ${html}
     }
 
     // Get actual content dimensions before generating PDF
-    const contentBox = await page.evaluate(() => {
+    await page.evaluate(() => {
       const elem = document.getElementById('cv-printable-area');
       if (!elem) return null;
       return {
@@ -217,10 +228,6 @@ ${html}
         scrollHeight: elem.scrollHeight
       };
     });
-
-    if (isDebug) {
-      console.log("Content box dimensions:", JSON.stringify(contentBox));
-    }
 
     const pdfBuffer = await page.pdf({
       format: "A4",
@@ -247,14 +254,19 @@ ${html}
     const safeFilename = (filename || "CV.pdf")
       .replace(/[\r\n"']/g, "")
       .replace(/\s+/g, "_");
-    const encodedFilename = encodeURIComponent(safeFilename);
 
-    return new NextResponse(Buffer.from(pdfBuffer) as any, {
+    // Convert to base64 to bypass issues with binary body stripping in some Next.js environments
+    const base64Content = Buffer.from(pdfBuffer).toString('base64');
+
+    return NextResponse.json({
+      success: true,
+      base64: base64Content,
+      filename: safeFilename,
+      size: pdfBuffer.length
+    }, {
       status: 200,
       headers: {
-        "Content-Type": "application/pdf",
-        "Content-Length": pdfBuffer.length.toString(),
-        "Content-Disposition": `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodedFilename}`,
+        "Cache-Control": "no-cache, no-store, must-revalidate",
       },
     });
 

@@ -43,3 +43,14 @@ export interface CVProject {
   endDate?: string | null;
   githubUrl?: string | null;
 }
+export interface CVUser {
+  _id: string;
+  name: string;
+  email: string;
+  linkedin: string;
+  github: string;
+  bio: string;
+  universityId?: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
