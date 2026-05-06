@@ -1,53 +1,119 @@
 import { NextRequest, NextResponse } from "next/server";
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
+import { auth } from "@/auth";
+
+export const runtime = 'nodejs';
+
+// SSRF Protection: Block access to local and private networks
+const isPrivateNetwork = (url: string) => {
+  try {
+    const parsedUrl = new URL(url);
+    const hostname = parsedUrl.hostname;
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "[::1]" ||
+      hostname.startsWith("10.") ||
+      hostname.startsWith("192.168.") ||
+      hostname.startsWith("172.16.") || // Should check range 172.16.0.0 – 172.31.255.255
+      hostname.startsWith("169.254.")
+    );
+  } catch (e) {
+    return true; // Block invalid URLs
+  }
+};
 
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let browser;
   try {
-    const { html, filename } = await req.json();
+    const body = await req.json();
+    const { html, filename } = body;
 
     if (!html) {
       return NextResponse.json({ error: "HTML content is required" }, { status: 400 });
     }
 
-    console.log("PDF Export - HTML length:", html.length);
-    console.log("PDF Export - HTML content preview:", html.substring(0, 500));
-
-    // Launch puppeteer
-    let browser;
-    try {
-      browser = await puppeteer.launch({
-        headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      });
-    } catch (error) {
-      console.error("Puppeteer launch error:", error);
-      throw new Error(
-        "Could not launch browser for PDF generation. " +
-        "Ensure Chromium is installed by running: npx puppeteer browsers install chrome"
-      );
+    // Payload size limit (e.g., 2MB)
+    if (JSON.stringify(body).length > 2 * 1024 * 1024) {
+      return NextResponse.json({ error: "Payload too large" }, { status: 413 });
     }
+
+    const isDebug = process.env.NODE_ENV !== "production" || process.env.DEBUG_PDF === "true";
+
+    if (isDebug) {
+      console.log("PDF Export - HTML length:", html.length);
+    }
+
+    // Launch puppeteer-core with @sparticuz/chromium
+    let executablePath: string | undefined;
+
+    try {
+      executablePath = await chromium.executablePath();
+    } catch (e) {
+      // Chromium not available, use system browser
+    }
+
+    // Local development fallback for Windows/MacOS
+    if (!executablePath && process.env.NODE_ENV === "development") {
+      const { platform } = process;
+      if (platform === "win32") {
+        executablePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+        const edgePath = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
+        const fs = require('fs');
+        if (!fs.existsSync(executablePath) && fs.existsSync(edgePath)) {
+          executablePath = edgePath;
+        }
+      } else if (platform === "darwin") {
+        executablePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+      }
+    }
+
+    const launchConfig: any = {
+      args: (chromium as any).args || ["--no-sandbox"],
+      executablePath,
+      defaultViewport: (chromium as any).defaultViewport,
+      headless: (chromium as any).headless,
+    };
+
+    browser = await puppeteer.launch(launchConfig);
 
     const page = await browser.newPage();
 
-    // Set viewport to A4 dimensions (794x1123 at 96 DPI)
+    // SSRF Protection
+    await page.setRequestInterception(true);
+    page.on("request", (request) => {
+      if (isPrivateNetwork(request.url())) {
+        request.abort();
+      } else {
+        request.continue();
+      }
+    });
+
+    // Set viewport to A4 dimensions
     await page.setViewport({
       width: 794,
       height: 1123,
       deviceScaleFactor: 1,
     });
 
-    // Log console messages from the page
-    page.on('console', msg => console.log('PAGE LOG:', msg.text()));
-    page.on('error', err => console.error('PAGE ERROR:', err));
+    if (isDebug) {
+      page.on('console', msg => console.log('PAGE LOG:', msg.text()));
+      page.on('error', err => console.error('PAGE ERROR:', err));
+    }
 
-    // Wrap the HTML element in a complete document with Tailwind
+    // Wrap the HTML element in a complete document
+    // NOTE: Removed Tailwind CDN. Relying on pre-inlined or global styles.
     const wrappedHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script src="https://cdn.tailwindcss.com"><\/script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 * {
   -webkit-print-color-adjust: exact !important;
@@ -61,7 +127,7 @@ html, body {
   background: white;
 }
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   margin: 0;
   padding: 0;
 }
@@ -80,118 +146,64 @@ ${html}
 </body>
 </html>`;
 
-    try {
-      await page.setContent(wrappedHtml, {
-        waitUntil: ["domcontentloaded", "networkidle2"]
-      });
-    } catch (contentError) {
-      console.error("Error setting content:", contentError);
-      throw contentError;
-    }
-
-    // Wait for Tailwind to compile and fonts to load
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    // Debug: Check if content is actually rendered
-    const contentCheck = await page.evaluate(() => {
-      const elem = document.getElementById('cv-printable-area');
-      if (!elem) {
-        return {
-          exists: false,
-          bodyHTML: document.body.innerHTML.substring(0, 200),
-          bodyChildren: document.body.children.length,
-        };
-      }
-      const styles = window.getComputedStyle(elem);
-      return {
-        exists: true,
-        innerHTML: elem.innerHTML.length,
-        textContent: elem.textContent?.length || 0,
-        offsetHeight: elem.offsetHeight,
-        offsetWidth: elem.offsetWidth,
-        offsetTop: (elem as any).offsetTop,
-        offsetLeft: (elem as any).offsetLeft,
-        display: styles.display,
-        visibility: styles.visibility,
-        backgroundColor: styles.backgroundColor,
-        color: styles.color,
-      };
+    await page.setContent(wrappedHtml, {
+      waitUntil: "load"
     });
-    console.log("Content check:", JSON.stringify(contentCheck));
 
-    // Generate screenshot for debugging
-    const screenshot = await page.screenshot({ fullPage: true });
-    console.log(`Screenshot generated: ${screenshot.length} bytes`);
+    // Deterministic readiness check: wait for fonts and layout
+    await page.evaluateHandle(() => (document as any).fonts.ready);
+    await page.waitForFunction(() => {
+      const elem = document.getElementById('cv-printable-area');
+      return elem && elem.offsetHeight > 0;
+    }, { timeout: 5000 });
 
-    // Check if page bounds are correct
-    const metrics = await page.metrics();
-    console.log("Page metrics:", JSON.stringify(metrics));
-
-    // Try to generate PDF with different approach
-    console.log("Attempting PDF generation with A4 format...");
-    let pdfBuffer;
-    try {
-      // First attempt: Standard A4 PDF
-      pdfBuffer = await page.pdf({
-        format: "A4",
-        printBackground: true,
-        margin: { top: 0, right: 0, bottom: 0, left: 0 },
-      });
-      console.log(`Generated PDF (attempt 1) - size: ${pdfBuffer.length} bytes`);
-
-      // If empty, try different settings
-      if (pdfBuffer.length === 0) {
-        console.warn("PDF buffer is empty, trying alternative settings...");
-        pdfBuffer = await page.pdf({
-          width: "210mm",
-          height: "297mm",
-          margin: { top: 0, right: 0, bottom: 0, left: 0 },
-          printBackground: true,
-        });
-        console.log(`Generated PDF (attempt 2) - size: ${pdfBuffer.length} bytes`);
-      }
-
-      // If still empty, try with no margin specs
-      if (pdfBuffer.length === 0) {
-        console.warn("PDF still empty, trying without margin settings...");
-        pdfBuffer = await page.pdf({
-          format: "A4",
-          printBackground: true,
-        });
-        console.log(`Generated PDF (attempt 3) - size: ${pdfBuffer.length} bytes`);
-      }
-    } catch (pdfError) {
-      console.error("PDF generation error:", pdfError);
-      throw pdfError;
+    if (isDebug) {
+      const metrics = await page.metrics();
+      console.log("Page metrics:", JSON.stringify(metrics));
     }
 
-    console.log(`Final PDF buffer size: ${pdfBuffer.length} bytes`);
-
-    await browser.close();
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: 0, right: 0, bottom: 0, left: 0 },
+    });
 
     if (pdfBuffer.length === 0) {
-      const errorMsg = `Generated PDF is empty (0 bytes). Content check: ${JSON.stringify(contentCheck)}`;
-      console.error(errorMsg);
-      throw new Error(errorMsg);
+      throw new Error("Generated PDF is empty");
     }
 
-    if (pdfBuffer.length < 5000) {
-      console.warn(`Warning: PDF is small (${pdfBuffer.length} bytes) - check if content rendered correctly`);
-    }
+    // Sanitize filename
+    const safeFilename = (filename || "CV.pdf")
+      .replace(/[\r\n"']/g, "")
+      .replace(/\s+/g, "_");
+    const encodedFilename = encodeURIComponent(safeFilename);
 
-    return new NextResponse(Buffer.from(pdfBuffer), {
+    return new NextResponse(Buffer.from(pdfBuffer) as any, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
         "Content-Length": pdfBuffer.length.toString(),
-        "Content-Disposition": `attachment; filename="${filename || "CV.pdf"}"`,
+        "Content-Disposition": `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodedFilename}`,
       },
     });
-  } catch (error: any) {
+
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const isDebug = process.env.NODE_ENV !== "production" || process.env.DEBUG_PDF === "true";
+    
     console.error("PDF generation error:", error);
+    
     return NextResponse.json(
-      { error: "Failed to generate PDF: " + error.message },
+      { 
+        error: isDebug ? `Failed to generate PDF: ${errorMsg}` : "Failed to generate PDF",
+        detail: isDebug && error instanceof Error ? error.stack : undefined
+      },
       { status: 500 }
     );
+  } finally {
+    if (browser) {
+      await browser.close().catch(err => console.error("Error closing browser:", err));
+    }
   }
 }
+
