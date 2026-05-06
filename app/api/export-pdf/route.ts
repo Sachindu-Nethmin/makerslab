@@ -10,20 +10,64 @@ export const runtime = 'nodejs';
 const isPrivateNetwork = (url: string) => {
   try {
     const parsedUrl = new URL(url);
-    const hostname = parsedUrl.hostname;
-    return (
-      hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
-      hostname === "[::1]" ||
-      hostname.startsWith("10.") ||
-      hostname.startsWith("192.168.") ||
-      hostname.startsWith("172.16.") || // Should check range 172.16.0.0 – 172.31.255.255
-      hostname.startsWith("169.254.")
-    );
+    
+    // 1. Validate URL protocol - only allow standard web protocols
+    const allowedProtocols = ['http:', 'https:', 'data:', 'about:'];
+    if (!allowedProtocols.includes(parsedUrl.protocol)) {
+      return true; // Block non-standard protocols
+    }
+
+    const hostname = parsedUrl.hostname.toLowerCase();
+    
+    // 2. Handle IPv6 bracketed forms
+    let cleanHostname = hostname;
+    if (cleanHostname.startsWith("[") && cleanHostname.endsWith("]")) {
+      cleanHostname = cleanHostname.slice(1, -1);
+    }
+
+    // 3. IPv4 Checks
+    if (
+      cleanHostname === "localhost" ||
+      cleanHostname === "127.0.0.1" ||
+      cleanHostname.startsWith("10.") ||
+      cleanHostname.startsWith("192.168.") ||
+      cleanHostname.startsWith("169.254.")
+    ) {
+      return true;
+    }
+
+    // Expand 172.16.0.0/12 range (172.16.0.0 – 172.31.255.255)
+    if (cleanHostname.startsWith("172.")) {
+      const parts = cleanHostname.split(".");
+      if (parts.length === 4) {
+        const secondOctet = parseInt(parts[1], 10);
+        if (secondOctet >= 16 && secondOctet <= 31) return true;
+      }
+    }
+
+    // 4. IPv6 Checks
+    // Loopback
+    if (cleanHostname === "::1" || cleanHostname === "0:0:0:0:0:0:0:1") {
+      return true;
+    }
+
+    // Link-local fe80::/10 (fe80... to febf...)
+    if (cleanHostname.startsWith("fe8") || cleanHostname.startsWith("fe9") || 
+        cleanHostname.startsWith("fea") || cleanHostname.startsWith("feb")) {
+      return true;
+    }
+
+    // Unique Local Address (ULA) fc00::/7 (fc00... to fdff...)
+    if (cleanHostname.startsWith("fc") || cleanHostname.startsWith("fd")) {
+      return true;
+    }
+
+    return false;
   } catch (e) {
     return true; // Block invalid URLs
   }
 };
+
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -115,7 +159,9 @@ export async function POST(req: NextRequest) {
     // SSRF Protection
     await page.setRequestInterception(true);
     page.on("request", (request) => {
-      if (isPrivateNetwork(request.url())) {
+      const url = request.url();
+      if (isPrivateNetwork(url)) {
+        if (isDebug) console.warn("SSRF Protection: Blocking request to", url);
         request.abort();
       } else {
         request.continue();
