@@ -8,47 +8,55 @@ import { BuilderForm } from "@/components/cv-builder/builder-form";
 
 export default async function CVBuilderPage() {
   const session = await auth();
-  console.log("CV Builder Page: Checking session...", session?.user?.email);
 
-  if (!session?.user) {
-    console.log("CV Builder Page: No session, redirecting to login");
+  if (!session?.user?.id || !ObjectId.isValid(session.user.id)) {
     redirect("/login");
   }
 
   const db = await getDatabase();
   const userId = new ObjectId(session.user.id);
-  console.log("CV Builder Page: Looking for user in DB with ID:", session.user.id);
 
-  const user = await db.collection<User>("users").findOne({ _id: userId });
+  const user = await db.collection<User>("users").findOne(
+    { _id: userId },
+    { projection: { name: 1, email: 1, linkedin: 1, github: 1, bio: 1, universityId: 1, createdAt: 1, updatedAt: 1 } }
+  );
   
   if (!user) {
-    console.log("CV Builder Page: User not found in DB, redirecting to login");
     redirect("/login");
   }
 
   const projects = await db
     .collection<Project>("projects")
-    .find({ userId: userId })
+    .find(
+      { userId: userId },
+      { projection: { title: 1, description: 1, category: 1, tags: 1, status: 1, startDate: 1, endDate: 1, githubUrl: 1 } }
+    )
     .sort({ createdAt: -1 })
     .toArray();
 
-  // Convert ObjectIds and Dates to strings for the client component
+  // Convert ObjectIds and Dates to strings for the client component with explicit allow-list
   const serializedUser = {
-    ...user,
     _id: user._id?.toString(),
+    name: user.name,
+    email: user.email,
+    linkedin: (user as any).linkedin || "",
+    github: (user as any).github || "",
+    bio: (user as any).bio || "",
     universityId: user.universityId?.toString(),
-    createdAt: user.createdAt.toISOString(),
-    updatedAt: user.updatedAt.toISOString(),
+    createdAt: user.createdAt?.toISOString() || null,
+    updatedAt: user.updatedAt?.toISOString() || null,
   };
 
   const serializedProjects = projects.map(p => ({
-    ...p,
     _id: p._id?.toString(),
-    userId: p.userId.toString(),
-    createdAt: p.createdAt.toISOString(),
-    updatedAt: p.updatedAt.toISOString(),
-    startDate: p.startDate?.toISOString(),
-    endDate: p.endDate?.toISOString(),
+    title: p.title,
+    description: p.description,
+    category: p.category,
+    tags: p.tags,
+    status: p.status,
+    startDate: p.startDate?.toISOString() || null,
+    endDate: p.endDate?.toISOString() || null,
+    githubUrl: p.githubUrl || null,
   }));
 
   return (
@@ -65,3 +73,4 @@ export default async function CVBuilderPage() {
     </div>
   );
 }
+

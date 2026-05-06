@@ -1,20 +1,27 @@
 "use client";
 
 import React from "react";
+import { CVInfo, Education, Leadership, Certificate, CVProject } from "./types";
 
 interface CVTemplateProps {
-  cvInfo: any;
-  projects: any[];
-  education?: any;
-  leadership?: any[];
-  certificates?: any[];
+  cvInfo: CVInfo;
+  projects: CVProject[];
+  education?: Education;
+  leadership?: Leadership[];
+  certificates?: Certificate[];
 }
 
+const sansFont = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+const serifFont = "Georgia, 'Times New Roman', Times, serif";
+const monoFont = "ui-monospace, 'Courier New', monospace";
+
 export function CVTemplate({ cvInfo, projects, education, leadership = [], certificates = [] }: CVTemplateProps) {
-  const skills = cvInfo.skills.split(",").map((s: string) => s.trim()).filter(Boolean);
+  const skills = typeof cvInfo?.skills === "string"
+    ? cvInfo.skills.split(",").map((s: string) => s.trim()).filter(Boolean)
+    : [];
 
   // Group certificates by category
-  const certificatesByCategory = certificates.reduce((acc: any, cert: any) => {
+  const certificatesByCategory = certificates.reduce((acc: Record<string, Certificate[]>, cert: Certificate) => {
     if (!acc[cert.category]) {
       acc[cert.category] = [];
     }
@@ -22,69 +29,76 @@ export function CVTemplate({ cvInfo, projects, education, leadership = [], certi
     return acc;
   }, {});
 
-  return (
-    <div id="cv-printable-area" className="w-full bg-white text-[#1a1a1a] font-serif leading-relaxed">
-      {/* Header */}
-      <header className="border-b-2 border-black pb-6 mb-8">
-        <h1 className="text-4xl font-bold uppercase tracking-tighter mb-2">{cvInfo.name}</h1>
+  const contactLine1 = [cvInfo.phone, cvInfo.address].filter(Boolean);
+  const contactLine2 = [
+    cvInfo.email,
+    cvInfo.linkedin ? { label: "LinkedIn", url: cvInfo.linkedin } : null,
+    cvInfo.github ? { label: "GitHub", url: cvInfo.github } : null
+  ].filter(Boolean);
 
-        <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm font-sans mb-4">
-          {cvInfo.phone && <div>{cvInfo.phone}</div>}
-          {cvInfo.address && <div>⋄ {cvInfo.address}</div>}
+  return (
+    <div id="cv-printable-area" style={{ width: '100%', background: 'white', color: '#1a1a1a', fontFamily: serifFont, lineHeight: 1.625 }}>
+      {/* Header */}
+      <header style={{ borderBottom: '2px solid black', paddingBottom: '1.5rem', marginBottom: '2rem' }}>
+        <h1 style={{ fontSize: '2.25rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '-0.05em', marginBottom: '0.5rem' }}>{cvInfo.name}</h1>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: '1.5rem', rowGap: '0.5rem', fontSize: '0.875rem', fontFamily: sansFont, marginBottom: '1rem' }}>
+          {contactLine1.map((item, idx) => (
+            <div key={idx}>{idx > 0 && "⋄ "}{item}</div>
+          ))}
         </div>
 
-        <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm font-sans">
-          {cvInfo.email && <div>{cvInfo.email}</div>}
-          {cvInfo.linkedin && (
-            <div>
-              ⋄ <a href={cvInfo.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                Linkedin
-              </a>
+        <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: '1.5rem', rowGap: '0.5rem', fontSize: '0.875rem', fontFamily: sansFont }}>
+          {contactLine2.map((item, idx) => (
+            <div key={idx}>
+              {idx > 0 && "⋄ "}
+              {typeof item === "string" ? (
+                item
+              ) : (
+                <a href={item?.url} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb' }}>
+                  {item?.label}
+                </a>
+              )}
             </div>
-          )}
-          {cvInfo.github && (
-            <div>
-              ⋄ <a href={cvInfo.github} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                GitHub
-              </a>
-            </div>
-          )}
+          ))}
         </div>
       </header>
 
       {/* Summary */}
       {cvInfo.summary && (
-        <section className="mb-8">
-          <h2 className="text-lg font-bold uppercase border-b border-gray-300 mb-3 font-sans tracking-wider">Summary</h2>
-          <p className="text-[14px] text-gray-800 leading-relaxed">{cvInfo.summary}</p>
+        <section style={{ marginBottom: '2rem' }}>
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 'bold', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db', marginBottom: '0.75rem', fontFamily: sansFont, letterSpacing: '0.05em' }}>Summary</h2>
+          <p style={{ fontSize: 14, color: '#1f2937', lineHeight: 1.625 }}>{cvInfo.summary}</p>
         </section>
       )}
 
       {/* Education */}
       {education && (
-        <section className="mb-8">
-          <h2 className="text-lg font-bold uppercase border-b border-gray-300 mb-3 font-sans tracking-wider">Education</h2>
+        <section style={{ marginBottom: '2rem' }}>
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 'bold', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db', marginBottom: '0.75rem', fontFamily: sansFont, letterSpacing: '0.05em' }}>Education</h2>
 
-          <div className="mb-6">
-            <div className="flex justify-between items-baseline">
-              <h3 className="font-bold text-md">{education.degree}</h3>
-              <span className="text-[12px] text-gray-600">{education.year}</span>
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <h3 style={{ fontWeight: 'bold', fontSize: '1rem' }}>{education.degree}</h3>
+              <span style={{ fontSize: 12, color: '#4b5563' }}>{education.year}</span>
             </div>
-            <p className="text-sm text-gray-700">{education.institution}</p>
+            <p style={{ fontSize: '0.875rem', color: '#374151' }}>{education.institution}</p>
             {education.coursework && (
-              <p className="text-[13px] text-gray-800 mt-2">
-                <span className="font-semibold">Relevant Coursework:</span> {education.coursework}
+              <p style={{ fontSize: 13, color: '#1f2937', marginTop: '0.5rem' }}>
+                <span style={{ fontWeight: 600 }}>Relevant Coursework:</span> {education.coursework}
               </p>
             )}
           </div>
 
           {education.highSchool && (
             <div>
-              <div className="flex justify-between items-baseline">
-                <h3 className="font-bold text-md">{education.highSchool}</h3>
-                <span className="text-[12px] text-gray-600">{education.highSchoolYear}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <h3 style={{ fontWeight: 'bold', fontSize: '1rem' }}>{education.highSchool}</h3>
+                <span style={{ fontSize: 12, color: '#4b5563' }}>{education.highSchoolYear}</span>
               </div>
-              <p className="text-sm text-gray-700">Advanced Level: Mathematics, Physics, Chemistry</p>
+              {education.highSchoolStream && (
+                <p style={{ fontSize: '0.875rem', color: '#374151' }}>Advanced Level: {education.highSchoolStream}</p>
+              )}
             </div>
           )}
         </section>
@@ -92,11 +106,11 @@ export function CVTemplate({ cvInfo, projects, education, leadership = [], certi
 
       {/* Technical Skills */}
       {skills.length > 0 && (
-        <section className="mb-8">
-          <h2 className="text-lg font-bold uppercase border-b border-gray-300 mb-3 font-sans tracking-wider">Technical Skills</h2>
-          <div className="flex flex-wrap gap-2">
+        <section style={{ marginBottom: '2rem' }}>
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 'bold', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db', marginBottom: '0.75rem', fontFamily: sansFont, letterSpacing: '0.05em' }}>Technical Skills</h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
             {skills.map((skill: string) => (
-              <span key={skill} className="text-xs bg-gray-50 px-2 py-1 rounded border border-gray-200 font-sans">
+              <span key={skill} style={{ fontSize: '0.75rem', background: '#f9fafb', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', border: '1px solid #e5e7eb', fontFamily: sansFont }}>
                 {skill}
               </span>
             ))}
@@ -106,29 +120,29 @@ export function CVTemplate({ cvInfo, projects, education, leadership = [], certi
 
       {/* Projects */}
       {projects.length > 0 && (
-        <section className="mb-8">
-          <h2 className="text-lg font-bold uppercase border-b border-gray-300 mb-4 font-sans tracking-wider">Projects</h2>
-          <div className="space-y-6">
-            {projects.map((project) => (
-              <div key={project._id} className="break-inside-avoid">
-                <div className="flex justify-between items-baseline mb-1">
-                  <h4 className="text-md font-bold font-sans">{project.title}</h4>
+        <section style={{ marginBottom: '2rem' }}>
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 'bold', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db', marginBottom: '1rem', fontFamily: sansFont, letterSpacing: '0.05em' }}>Projects</h2>
+          <div>
+            {projects.map((project, index) => (
+              <div key={project._id} style={{ breakInside: 'avoid', marginTop: index === 0 ? 0 : '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.25rem' }}>
+                  <h4 style={{ fontSize: '1rem', fontWeight: 'bold', fontFamily: sansFont }}>{project.title}</h4>
                   {project.githubUrl && (
-                    <a href={project.githubUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-[10px]">
+                    <a href={project.githubUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', fontSize: 10 }}>
                       GitHub
                     </a>
                   )}
                 </div>
-                <span className="text-[10px] text-gray-500 italic font-sans">
+                <span style={{ fontSize: 10, color: '#6b7280', fontStyle: 'italic', fontFamily: sansFont }}>
                   {project.startDate && new Date(project.startDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
                   {project.startDate && " - "}
                   {project.endDate ? new Date(project.endDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : (project.status === 'in-progress' ? 'Present' : '')}
                 </span>
-                <p className="text-[11px] font-sans text-gray-700 mb-2 uppercase tracking-widest font-semibold">{project.category}</p>
-                <p className="text-[13px] text-gray-800 mb-3 leading-snug">{project.description}</p>
-                <div className="flex flex-wrap gap-2 mb-2">
+                <p style={{ fontSize: 11, fontFamily: sansFont, color: '#374151', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 600 }}>{project.category}</p>
+                <p style={{ fontSize: 13, color: '#1f2937', marginBottom: '0.75rem', lineHeight: 1.375 }}>{project.description}</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
                   {project.tags.map((tag: string) => (
-                    <span key={tag} className="text-[9px] font-mono bg-gray-50 text-gray-500 border border-gray-200 px-1.5 py-0.5 rounded uppercase">
+                    <span key={tag} style={{ fontSize: 9, fontFamily: monoFont, background: '#f9fafb', color: '#6b7280', border: '1px solid #e5e7eb', padding: '0.125rem 0.375rem', borderRadius: '0.25rem', textTransform: 'uppercase' }}>
                       {tag}
                     </span>
                   ))}
@@ -141,12 +155,12 @@ export function CVTemplate({ cvInfo, projects, education, leadership = [], certi
 
       {/* Leadership & Activities */}
       {leadership.length > 0 && (
-        <section className="mb-8">
-          <h2 className="text-lg font-bold uppercase border-b border-gray-300 mb-3 font-sans tracking-wider">Leadership & Activities</h2>
-          <ul className="space-y-2">
+        <section style={{ marginBottom: '2rem' }}>
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 'bold', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db', marginBottom: '0.75rem', fontFamily: sansFont, letterSpacing: '0.05em' }}>Leadership & Activities</h2>
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {leadership.map((item, index) => (
-              <li key={index} className="text-[13px] text-gray-800 flex">
-                <span className="mr-2">•</span>
+              <li key={index} style={{ fontSize: 13, color: '#1f2937', display: 'flex', marginTop: index === 0 ? 0 : '0.5rem' }}>
+                <span style={{ marginRight: '0.5rem' }}>•</span>
                 <span>{item.title}{item.description && ` - ${item.description}`}</span>
               </li>
             ))}
@@ -156,19 +170,19 @@ export function CVTemplate({ cvInfo, projects, education, leadership = [], certi
 
       {/* Awards & Certificates */}
       {certificates.length > 0 && (
-        <section className="mb-8">
-          <h2 className="text-lg font-bold uppercase border-b border-gray-300 mb-3 font-sans tracking-wider">Awards & Certificates</h2>
-          {Object.entries(certificatesByCategory).map(([category, certs]: [string, any]) => (
-            <div key={category} className="mb-4">
-              <h3 className="font-bold text-md mb-2">{category}</h3>
-              <ul className="space-y-1">
-                {certs.map((cert: any, index: number) => (
-                  <li key={index} className="text-[12px] text-gray-800 flex justify-between">
+        <section style={{ marginBottom: '2rem' }}>
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 'bold', textTransform: 'uppercase', borderBottom: '1px solid #d1d5db', marginBottom: '0.75rem', fontFamily: sansFont, letterSpacing: '0.05em' }}>Awards & Certificates</h2>
+          {Object.entries(certificatesByCategory).map(([category, certs]: [string, Certificate[]]) => (
+            <div key={category} style={{ marginBottom: '1rem' }}>
+              <h3 style={{ fontWeight: 'bold', fontSize: '1rem', marginBottom: '0.5rem' }}>{category}</h3>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {certs.map((cert: Certificate, index: number) => (
+                  <li key={index} style={{ fontSize: 12, color: '#1f2937', display: 'flex', justifyContent: 'space-between', marginTop: index === 0 ? 0 : '0.25rem' }}>
                     <span>
                       • {cert.name} ({cert.issuer})
                     </span>
                     {cert.link && (
-                      <a href={cert.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                      <a href={cert.link} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb' }}>
                         Link
                       </a>
                     )}
@@ -179,56 +193,6 @@ export function CVTemplate({ cvInfo, projects, education, leadership = [], certi
           ))}
         </section>
       )}
-
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        * {
-          -webkit-print-color-adjust: exact !important;
-          color-adjust: exact !important;
-        }
-        @media print {
-          @page {
-            margin: 0;
-            size: A4;
-            padding: 0;
-          }
-          body {
-            background: white !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            -webkit-print-color-adjust: exact;
-            color-adjust: exact;
-          }
-          nav, header:not(#cv-printable-area header), footer, button, .no-print {
-            display: none !important;
-          }
-          #cv-printable-area {
-            display: block !important;
-            margin: 0 !important;
-            padding: 20mm !important;
-            border: none !important;
-            width: 100% !important;
-            max-width: none !important;
-            background: white !important;
-          }
-          .break-inside-avoid {
-            break-inside: avoid;
-            page-break-inside: avoid;
-          }
-          .min-h-screen, .bg-background {
-            background: white !important;
-            min-height: auto !important;
-            padding: 0 !important;
-          }
-          .max-w-7xl {
-            max-width: none !important;
-          }
-          section {
-            break-inside: avoid;
-            page-break-inside: avoid;
-          }
-        }
-      ` }} />
     </div>
   );
 }

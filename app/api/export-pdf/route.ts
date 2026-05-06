@@ -134,52 +134,37 @@ export async function POST(req: NextRequest) {
 * {
   -webkit-print-color-adjust: exact !important;
   color-adjust: exact !important;
-  margin: 0 !important;
-  padding: 0 !important;
+  box-sizing: border-box;
 }
 
 html, body {
   width: 100%;
-  height: 100%;
-  background: white !important;
+  background: white;
   margin: 0;
   padding: 0;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  margin: 0;
-  padding: 0;
-  background: white;
   display: block;
 }
 
 @page {
   size: A4;
   margin: 0;
-  padding: 0;
 }
 
 #cv-printable-area {
   width: 210mm;
-  height: 297mm;
-  margin: 0;
-  padding: 0;
+  padding: 20mm;
+  box-sizing: border-box;
   background: white;
   display: block !important;
   visibility: visible !important;
   opacity: 1 !important;
 }
 
-/* Hide UI elements */
 nav, header:not(#cv-printable-area header), footer, button, [class*="no-print"] {
   display: none !important;
-}
-
-/* Ensure text is visible */
-body, body * {
-  background: transparent !important;
-  color: #000 !important;
 }
 </style>
 </head>
@@ -214,7 +199,7 @@ ${html}
     }, { timeout: 10000 });
 
     // Additional delay to ensure all styles are applied
-    await page.waitForTimeout(1000);
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     if (isDebug) {
       const metrics = await page.metrics();

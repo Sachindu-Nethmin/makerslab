@@ -2,20 +2,23 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Printer, FileDown, Loader2 } from "lucide-react";
+import { Printer, FileDown, Loader2, CheckCircle2 } from "lucide-react";
 import { CVTemplate } from "./cv-template";
 import { toast } from "sonner";
+import { CVInfo, CVProject, Education, Leadership, Certificate } from "./types";
 
 interface CVPreviewProps {
-  cvInfo: any;
-  projects: any[];
-  education?: any;
-  leadership?: any[];
-  certificates?: any[];
+  cvInfo: CVInfo;
+  projects: CVProject[];
+  education?: Education;
+  leadership?: Leadership[];
+  certificates?: Certificate[];
+  user: any;
 }
 
-export function CVPreview({ cvInfo, projects, education, leadership, certificates }: CVPreviewProps) {
+export function CVPreview({ cvInfo, projects, education, leadership, certificates, user }: CVPreviewProps) {
   const [isExporting, setIsExporting] = useState(false);
+  const [exportComplete, setExportComplete] = useState(false);
 
   const handlePrint = () => {
     window.print();
@@ -23,6 +26,7 @@ export function CVPreview({ cvInfo, projects, education, leadership, certificate
 
   const handleExportPDF = async () => {
     setIsExporting(true);
+    setExportComplete(false);
     try {
       const element = document.getElementById("cv-printable-area");
       if (!element) {
@@ -30,79 +34,45 @@ export function CVPreview({ cvInfo, projects, education, leadership, certificate
         return;
       }
 
-      const filename = `${cvInfo.name.replace(/\s+/g, "_")}_CV.pdf`;
+      const safeName = String(cvInfo.name || "Untitled").trim();
+      const filename = `${safeName.replace(/\s+/g, "_")}_CV.pdf`;
 
-      // Create HTML for printing with Tailwind CSS
-      const printHTML = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script src="https://cdn.tailwindcss.com"><\/script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-<style>
-* {
-  -webkit-print-color-adjust: exact !important;
-  color-adjust: exact !important;
-}
-@page {
-  size: A4;
-  margin: 0;
-  padding: 0;
-}
-html, body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  background: white;
-}
-body {
-  font-family: 'Inter', system-ui, sans-serif;
-  line-height: 1.5;
-}
-#cv-printable-area {
-  padding: 20mm;
-  background: white;
-  width: 100%;
-}
-@media print {
-  body {
-    margin: 0;
-    padding: 0;
-    background: white;
-  }
-  #cv-printable-area {
-    padding: 20mm;
-    margin: 0;
-  }
-  .no-print { display: none !important; }
-  nav, button { display: none !important; }
-}
-</style>
-</head>
-<body style="margin:0; padding:0; background:white;">
-${element.outerHTML}
-<script>
-window.addEventListener('load', () => {
-  setTimeout(() => {
-    window.print();
-  }, 1000);
-});
-</script>
-</body>
-</html>`;
+      // Send the HTML content to our backend API
+      const response = await fetch("/api/export-pdf", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          html: element.outerHTML,
+          filename: filename,
+        }),
+      });
 
-      // Open in a new window and print
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(printHTML);
-        printWindow.document.close();
-      } else {
-        throw new Error("Could not open print window. Please check popup blockers.");
+      if (!response.ok) {
+        let errorMessage = "Failed to generate PDF";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          errorMessage = `Server error: ${response.status} ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
 
-      toast.success("Print dialog opened. Select 'Save as PDF' to download.");
+      // Convert the response to a blob and trigger download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setExportComplete(true);
+      toast.success("CV exported successfully");
     } catch (error: any) {
       console.error("Export error:", error);
       toast.error(error.message || "Failed to export PDF");
@@ -154,17 +124,32 @@ window.addEventListener('load', () => {
         </CardContent>
       </Card>
       
-      <div className="bg-primary/10 border border-primary/20 p-4 rounded-xl flex items-start gap-3">
-        <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-          <FileDown className="h-4 w-4 text-primary" />
+      {exportComplete ? (
+        <div className="bg-green-50 border border-green-200 p-4 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2">
+          <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-green-800">Download Complete</p>
+            <p className="text-xs text-green-700">
+              Your professional CV has been exported. The layout is optimized for A4 format.
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-medium text-primary">Download Complete</p>
-          <p className="text-xs text-primary/80">
-            Your professional CV is ready for submission. The layout is optimized for A4 format.
-          </p>
+      ) : (
+        <div className="bg-primary/10 border border-primary/20 p-4 rounded-xl flex items-start gap-3">
+          <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+            <FileDown className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-primary">Ready for Export</p>
+            <p className="text-xs text-primary/80">
+              Optimized for A4 — click Export PDF when you're ready to download.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
+

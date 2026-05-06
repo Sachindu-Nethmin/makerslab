@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,72 +9,109 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { X, Plus } from "lucide-react";
 import { CVPreview } from "./cv-preview";
-
-interface CVInfo {
-  name: string;
-  title: string;
-  email: string;
-  phone: string;
-  address: string;
-  linkedin: string;
-  github: string;
-  summary: string;
-  skills: string;
-}
-
-interface Education {
-  degree: string;
-  institution: string;
-  year: string;
-  coursework: string;
-  highSchool: string;
-  highSchoolYear: string;
-}
-
-interface Leadership {
-  title: string;
-  description: string;
-}
-
-interface Certificate {
-  name: string;
-  category: string;
-  issuer: string;
-  link: string;
-}
+import { CVInfo, Education, Leadership, Certificate, CVProject } from "./types";
 
 interface BuilderFormProps {
   user: any;
-  projects: any[];
+  projects: CVProject[];
 }
 
 export function BuilderForm({ user, projects }: BuilderFormProps) {
-  const [cvInfo, setCvInfo] = useState<CVInfo>({
-    name: user.name || "",
-    title: "Software Engineer",
-    email: user.email || "",
-    phone: "",
-    address: "",
-    linkedin: user.linkedin || "",
-    github: user.github || "",
-    summary: user.bio || "",
-    skills: Array.from(new Set(projects.flatMap(p => p.tags))).join(", "),
+  // Initialize state from localStorage or defaults
+  const STORAGE_KEY = `userCV:${user._id}`;
+
+  const [cvInfo, setCvInfo] = useState<CVInfo>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.cvInfo) return parsed.cvInfo;
+        }
+      } catch (e) {
+        console.error("Failed to load CV info from localStorage", e);
+      }
+    }
+    return {
+      name: user.name || "",
+      title: "",
+      email: user.email || "",
+      phone: "",
+      address: "",
+      linkedin: user.linkedin || "",
+      github: user.github || "",
+      summary: user.bio || "",
+      skills: Array.from(new Set(projects.flatMap(p => p.tags))).join(", "),
+    };
   });
 
-  const [education, setEducation] = useState<Education>({
-    degree: "BSc (Hons) in Computer and Information Systems",
-    institution: "Sabaragamuwa University of Sri Lanka",
-    year: "2022 – 2026 (Expected)",
-    coursework: "",
-    highSchool: "Rahula College Matara",
-    highSchoolYear: "2007-2021",
+  const [education, setEducation] = useState<Education>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.education) return parsed.education;
+        }
+      } catch (e) {
+        console.error("Failed to load education from localStorage", e);
+      }
+    }
+    return {
+      degree: "",
+      institution: "",
+      year: "",
+      coursework: "",
+      highSchool: "",
+      highSchoolYear: "",
+      highSchoolStream: "",
+    };
   });
 
-  const [leadership, setLeadership] = useState<Leadership[]>([]);
-  const [certificates, setCertificates] = useState<Certificate[]>([]);
-  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(
-    projects.slice(0, 3).map(p => p._id)
-  );
+  const [leadership, setLeadership] = useState<Leadership[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.leadership) return parsed.leadership;
+        }
+      } catch (e) {
+        console.error("Failed to load leadership from localStorage", e);
+      }
+    }
+    return [];
+  });
+
+  const [certificates, setCertificates] = useState<Certificate[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.certificates) return parsed.certificates;
+        }
+      } catch (e) {
+        console.error("Failed to load certificates from localStorage", e);
+      }
+    }
+    return [];
+  });
+
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.selectedProjectIds) return parsed.selectedProjectIds;
+        }
+      } catch (e) {
+        console.error("Failed to load selected projects from localStorage", e);
+      }
+    }
+    return projects.slice(0, 3).map(p => p._id);
+  });
 
   const [newLeadership, setNewLeadership] = useState<Leadership>({
     title: "",
@@ -87,6 +124,21 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
     issuer: "",
     link: "",
   });
+
+  // Persist to localStorage on change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        cvInfo,
+        education,
+        leadership,
+        certificates,
+        selectedProjectIds
+      }));
+    } catch (e) {
+      console.error("Failed to save CV data to localStorage", e);
+    }
+  }, [cvInfo, education, leadership, certificates, selectedProjectIds, STORAGE_KEY]);
 
   const handleCvInfoChange = (field: keyof CVInfo, value: string) => {
     setCvInfo(prev => ({ ...prev, [field]: value }));
@@ -106,24 +158,24 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
 
   const addLeadership = () => {
     if (newLeadership.title.trim()) {
-      setLeadership([...leadership, newLeadership]);
+      setLeadership(prev => [...prev, newLeadership]);
       setNewLeadership({ title: "", description: "" });
     }
   };
 
   const removeLeadership = (index: number) => {
-    setLeadership(leadership.filter((_, i) => i !== index));
+    setLeadership(prev => prev.filter((_, i) => i !== index));
   };
 
   const addCertificate = () => {
     if (newCertificate.name.trim() && newCertificate.category.trim()) {
-      setCertificates([...certificates, newCertificate]);
+      setCertificates(prev => [...prev, newCertificate]);
       setNewCertificate({ name: "", category: "", issuer: "", link: "" });
     }
   };
 
   const removeCertificate = (index: number) => {
-    setCertificates(certificates.filter((_, i) => i !== index));
+    setCertificates(prev => prev.filter((_, i) => i !== index));
   };
 
   const selectedProjects = projects.filter(p => selectedProjectIds.includes(p._id));
@@ -264,6 +316,7 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
                   <Input
                     value={education.degree}
                     onChange={(e) => handleEducationChange("degree", e.target.value)}
+                    placeholder="BSc (Hons) in Computer Science"
                   />
                 </div>
 
@@ -273,6 +326,7 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
                     <Input
                       value={education.institution}
                       onChange={(e) => handleEducationChange("institution", e.target.value)}
+                      placeholder="University Name"
                     />
                   </div>
                   <div className="space-y-2">
@@ -302,16 +356,27 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
                   <Input
                     value={education.highSchool}
                     onChange={(e) => handleEducationChange("highSchool", e.target.value)}
+                    placeholder="High School Name"
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label>High School Year</Label>
-                  <Input
-                    value={education.highSchoolYear}
-                    onChange={(e) => handleEducationChange("highSchoolYear", e.target.value)}
-                    placeholder="2007-2021"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>High School Year</Label>
+                    <Input
+                      value={education.highSchoolYear}
+                      onChange={(e) => handleEducationChange("highSchoolYear", e.target.value)}
+                      placeholder="2019-2021"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Stream</Label>
+                    <Input
+                      value={education.highSchoolStream || ""}
+                      onChange={(e) => handleEducationChange("highSchoolStream", e.target.value)}
+                      placeholder="Physical Science, Commerce..."
+                    />
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -339,7 +404,7 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
                   />
                 </div>
 
-                <Button onClick={addLeadership} variant="outline" className="w-full">
+                <Button onClick={addLeadership} variant="outline" className="w-full" type="button">
                   <Plus className="w-4 h-4 mr-2" /> Add Activity
                 </Button>
 
@@ -350,7 +415,7 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
                         <p className="font-semibold text-sm">{item.title}</p>
                         {item.description && <p className="text-xs text-muted-foreground">{item.description}</p>}
                       </div>
-                      <button onClick={() => removeLeadership(idx)}>
+                      <button onClick={() => removeLeadership(idx)} type="button">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
@@ -400,11 +465,11 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
                   <Input
                     value={newCertificate.link}
                     onChange={(e) => setNewCertificate({...newCertificate, link: e.target.value})}
-                    placeholder="https://google.drive.com/... or https://learn.unity.com/..."
+                    placeholder="https://..."
                   />
                 </div>
 
-                <Button onClick={addCertificate} variant="outline" className="w-full">
+                <Button onClick={addCertificate} variant="outline" className="w-full" type="button">
                   <Plus className="w-4 h-4 mr-2" /> Add Certificate
                 </Button>
 
@@ -420,7 +485,7 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
                           </a>
                         )}
                       </div>
-                      <button onClick={() => removeCertificate(idx)}>
+                      <button onClick={() => removeCertificate(idx)} type="button">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
@@ -439,8 +504,10 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
           education={education}
           leadership={leadership}
           certificates={certificates}
+          user={user}
         />
       </div>
     </div>
   );
 }
+
