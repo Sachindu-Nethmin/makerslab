@@ -25,6 +25,7 @@ import {
   TrendingUp,
   Heart,
   ExternalLink,
+  FileText,
 } from "lucide-react";
 import { StatsCard } from "@/components/admin/stats-card";
 import { ProjectViewsChart } from "@/components/user/charts/project-views-chart";
@@ -355,6 +356,12 @@ export default async function Dashboard() {
                 <Button className="w-full" variant="outline">
                   <TrendingUp className="h-4 w-4 mr-2" />
                   Explore Projects
+                </Button>
+              </Link>
+              <Link href="/cv-builder" className="block">
+                <Button className="w-full" variant="outline">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Build My CV
                 </Button>
               </Link>
               <Link href="/settings" className="block">
