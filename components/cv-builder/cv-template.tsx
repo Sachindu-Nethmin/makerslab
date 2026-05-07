@@ -44,14 +44,17 @@ export function CVTemplate({ cvInfo, projects, education, leadership = [], certi
 
         <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: '1.5rem', rowGap: '0.5rem', fontSize: '0.875rem', fontFamily: SANS_FONT, marginBottom: '1rem' }}>
           {contactLine1.map((item, idx) => (
-            <div key={idx}>{idx > 0 && "⋄ "}{item}</div>
+            <div key={idx}>
+              {idx > 0 && <span style={{ marginRight: '0.5rem' }}>⋄</span>}
+              {item}
+            </div>
           ))}
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: '1.5rem', rowGap: '0.5rem', fontSize: '0.875rem', fontFamily: SANS_FONT }}>
           {contactLine2.map((item, idx) => (
             <div key={idx}>
-              {idx > 0 && "⋄ "}
+              {idx > 0 && <span style={{ marginRight: '0.5rem' }}>⋄</span>}
               {typeof item === "string" ? (
                 item
               ) : (

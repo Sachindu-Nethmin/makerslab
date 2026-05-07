@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { X, Plus } from "lucide-react";
 import { CVPreview } from "./cv-preview";
-import { CVInfo, Education, Leadership, Certificate, CVProject } from "./types";
+import { CVInfo, Education, Leadership, Certificate, CVProject, CVUser } from "./types";
 
 interface BuilderFormProps {
   user: CVUser;
@@ -47,7 +47,7 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
   const [leadership, setLeadership] = useState<Leadership[]>([]);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(
-    projects.slice(0, 3).map(p => p._id)
+    projects.filter(p => p.status === "completed").slice(0, 3).map(p => p._id)
   );
 
   // Load from localStorage on mount
@@ -114,8 +114,10 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
   };
 
   const addLeadership = () => {
-    if (newLeadership.title.trim()) {
-      setLeadership(prev => [...prev, newLeadership]);
+    const trimmedTitle = newLeadership.title.trim();
+    const trimmedDescription = newLeadership.description?.trim() || "";
+    if (trimmedTitle) {
+      setLeadership(prev => [...prev, { title: trimmedTitle, description: trimmedDescription }]);
       setNewLeadership({ title: "", description: "" });
     }
   };
@@ -125,8 +127,13 @@ export function BuilderForm({ user, projects }: BuilderFormProps) {
   };
 
   const addCertificate = () => {
-    if (newCertificate.name.trim() && newCertificate.category.trim()) {
-      setCertificates(prev => [...prev, newCertificate]);
+    const trimmedName = newCertificate.name.trim();
+    const trimmedCategory = newCertificate.category.trim();
+    const trimmedIssuer = newCertificate.issuer?.trim() || "";
+    const trimmedLink = newCertificate.link?.trim() || "";
+
+    if (trimmedName && trimmedCategory) {
+      setCertificates(prev => [...prev, { name: trimmedName, category: trimmedCategory, issuer: trimmedIssuer, link: trimmedLink }]);
       setNewCertificate({ name: "", category: "", issuer: "", link: "" });
     }
   };

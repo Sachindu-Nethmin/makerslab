@@ -12,33 +12,32 @@ const isPrivateNetwork = (url: string) => {
     const parsedUrl = new URL(url);
     
     // 1. Validate URL protocol - only allow standard web protocols
-    const allowedProtocols = ['http:', 'https:', 'data:', 'about:'];
+    const allowedProtocols = ['http:', 'https:'];
     if (!allowedProtocols.includes(parsedUrl.protocol)) {
       return true; // Block non-standard protocols
     }
 
-    const hostname = parsedUrl.hostname.toLowerCase();
+    let hostname = parsedUrl.hostname.toLowerCase();
     
     // 2. Handle IPv6 bracketed forms
-    let cleanHostname = hostname;
-    if (cleanHostname.startsWith("[") && cleanHostname.endsWith("]")) {
-      cleanHostname = cleanHostname.slice(1, -1);
+    if (hostname.startsWith("[") && hostname.endsWith("]")) {
+      hostname = hostname.slice(1, -1);
     }
 
     // 3. IPv4 Checks
     if (
-      cleanHostname === "localhost" ||
-      cleanHostname === "127.0.0.1" ||
-      cleanHostname.startsWith("10.") ||
-      cleanHostname.startsWith("192.168.") ||
-      cleanHostname.startsWith("169.254.")
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname.startsWith("10.") ||
+      hostname.startsWith("192.168.") ||
+      hostname.startsWith("169.254.")
     ) {
       return true;
     }
 
     // Expand 172.16.0.0/12 range (172.16.0.0 – 172.31.255.255)
-    if (cleanHostname.startsWith("172.")) {
-      const parts = cleanHostname.split(".");
+    if (hostname.startsWith("172.")) {
+      const parts = hostname.split(".");
       if (parts.length === 4) {
         const secondOctet = parseInt(parts[1], 10);
         if (secondOctet >= 16 && secondOctet <= 31) return true;
@@ -47,18 +46,18 @@ const isPrivateNetwork = (url: string) => {
 
     // 4. IPv6 Checks
     // Loopback
-    if (cleanHostname === "::1" || cleanHostname === "0:0:0:0:0:0:0:1") {
+    if (hostname === "::1" || hostname === "0:0:0:0:0:0:0:1") {
       return true;
     }
 
     // Link-local fe80::/10 (fe80... to febf...)
-    if (cleanHostname.startsWith("fe8") || cleanHostname.startsWith("fe9") || 
-        cleanHostname.startsWith("fea") || cleanHostname.startsWith("feb")) {
+    if (hostname.startsWith("fe8") || hostname.startsWith("fe9") || 
+        hostname.startsWith("fea") || hostname.startsWith("feb")) {
       return true;
     }
 
     // Unique Local Address (ULA) fc00::/7 (fc00... to fdff...)
-    if (cleanHostname.startsWith("fc") || cleanHostname.startsWith("fd")) {
+    if (hostname.startsWith("fc") || hostname.startsWith("fd")) {
       return true;
     }
 
@@ -77,6 +76,11 @@ export async function POST(req: NextRequest) {
 
   let browser;
   try {
+    const contentLength = req.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > 2 * 1024 * 1024) {
+      return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+    }
+
     const body = await req.json();
     const { html, filename } = body;
 
@@ -85,7 +89,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Payload size limit (e.g., 2MB)
-    if (JSON.stringify(body).length > 2 * 1024 * 1024) {
+    if (Buffer.byteLength(html, "utf8") > 2 * 1024 * 1024) {
       return NextResponse.json({ error: "Payload too large" }, { status: 413 });
     }
 
@@ -140,16 +144,18 @@ export async function POST(req: NextRequest) {
     }
 
     const launchConfig = {
-      args: (chromium as any).args || [
+      args: isDevelopment ? [
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
         "--disable-accelerated-2d-canvas",
         "--disable-gpu",
-      ],
+      ] : chromium.args,
       executablePath,
-      defaultViewport: (chromium as any).defaultViewport || { width: 794, height: 1123 },
-      headless: (chromium as any).headless !== undefined ? (chromium as any).headless : true,
+      // @ts-expect-error: sparticuz/chromium types are incomplete
+      defaultViewport: chromium.defaultViewport,
+      // @ts-expect-error: sparticuz/chromium types are incomplete
+      headless: chromium.headless,
     };
 
     browser = await puppeteer.launch(launchConfig);
@@ -238,7 +244,7 @@ ${html}
 
     // Deterministic readiness check: wait for fonts and layout
     try {
-      await page.evaluateHandle(() => (document as any).fonts.ready);
+      await page.evaluate(() => document.fonts.ready);
     } catch {
       if (isDebug) console.log("Font loading not available");
     }
@@ -297,22 +303,19 @@ ${html}
     }
 
     // Sanitize filename
-    const safeFilename = (filename || "CV.pdf")
+    const fallbackFilename = filename || "CV.pdf";
+    const safeFilename = fallbackFilename
+      .replace(/[^\x20-\x7E]/g, "") // Strip non-ASCII
       .replace(/[\r\n"']/g, "")
       .replace(/\s+/g, "_");
+    const encodedFilename = encodeURIComponent(fallbackFilename);
 
-    // Convert to base64 to bypass issues with binary body stripping in some Next.js environments
-    const base64Content = Buffer.from(pdfBuffer).toString('base64');
-
-    return NextResponse.json({
-      success: true,
-      base64: base64Content,
-      filename: safeFilename,
-      size: pdfBuffer.length
-    }, {
+    return new NextResponse(Buffer.from(pdfBuffer), {
       status: 200,
       headers: {
+        "Content-Type": "application/pdf",
         "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Content-Disposition": `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodedFilename}`
       },
     });
 

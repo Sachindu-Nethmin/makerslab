@@ -19,10 +19,6 @@ export function CVPreview({ cvInfo, projects, education, leadership, certificate
   const [isExporting, setIsExporting] = useState(false);
   const [exportComplete, setExportComplete] = useState(false);
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   const handleExportPDF = async () => {
     setIsExporting(true);
     setExportComplete(false);
@@ -59,21 +55,12 @@ export function CVPreview({ cvInfo, projects, education, leadership, certificate
         throw new Error(errorMessage);
       }
 
-      // Parse JSON response which contains Base64 encoded PDF
-      const data = await response.json();
+      // Get the PDF as a Blob
+      const blob = await response.blob();
       
-      if (!data.base64) {
+      if (blob.size === 0) {
         throw new Error("Server response did not contain PDF data.");
       }
-
-      // Convert Base64 to Blob
-      const byteCharacters = atob(data.base64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: "application/pdf" });
 
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -108,10 +95,7 @@ export function CVPreview({ cvInfo, projects, education, leadership, certificate
           <p className="text-sm text-muted-foreground">This is how your CV will look.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handlePrint} className="h-9">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
+
           <Button 
             variant="default" 
             size="sm"

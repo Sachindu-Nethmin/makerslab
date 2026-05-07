@@ -29,7 +29,7 @@ export default async function CVBuilderPage() {
     .collection<Project>("projects")
     .find(
       { userId: userId },
-      { projection: { title: 1, description: 1, category: 1, tags: 1, status: 1, startDate: 1, endDate: 1, githubUrl: 1 } }
+      { projection: { title: 1, description: 1, category: 1, tags: 1, status: 1, startDate: 1, endDate: 1, githubUrl: 1, createdAt: 1 } }
     )
     .sort({ createdAt: -1 })
     .toArray();
