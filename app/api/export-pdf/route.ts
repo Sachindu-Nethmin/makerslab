@@ -27,7 +27,7 @@ const isPrivateNetwork = (url: string) => {
     // 3. IPv4 Checks
     if (
       hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
+      hostname.startsWith("127.") ||
       hostname.startsWith("10.") ||
       hostname.startsWith("192.168.") ||
       hostname.startsWith("169.254.")
@@ -84,8 +84,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { html, filename } = body;
 
-    if (!html) {
-      return NextResponse.json({ error: "HTML content is required" }, { status: 400 });
+    if (typeof html !== "string" || !html) {
+      return NextResponse.json({ error: "HTML content must be a string and is required" }, { status: 400 });
     }
 
     // Payload size limit (e.g., 2MB)
@@ -269,17 +269,6 @@ ${html}
       console.log("Page metrics:", JSON.stringify(metrics));
     }
 
-    // Get actual content dimensions before generating PDF
-    await page.evaluate(() => {
-      const elem = document.getElementById('cv-printable-area');
-      if (!elem) return null;
-      return {
-        width: elem.offsetWidth,
-        height: elem.offsetHeight,
-        clientHeight: elem.clientHeight,
-        scrollHeight: elem.scrollHeight
-      };
-    });
 
     const pdfBuffer = await page.pdf({
       format: "A4",
@@ -303,7 +292,7 @@ ${html}
     }
 
     // Sanitize filename
-    const fallbackFilename = filename || "CV.pdf";
+    const fallbackFilename = typeof filename === "string" ? filename : "CV.pdf";
     const safeFilename = fallbackFilename
       .replace(/[^\x20-\x7E]/g, "") // Strip non-ASCII
       .replace(/[\r\n"']/g, "")
